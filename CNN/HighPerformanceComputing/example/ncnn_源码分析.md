@@ -206,10 +206,11 @@ int ParamDict::load_param_bin(FILE* fp)
       [padding] (optional 可选)
 
           flag : unsigned int, little-endian, indicating the weight storage type, 
-                 0 => float32, 
+                 0          => float32, 
                  0x01306B47 => float16, 
-                 otherwise => quantized int8, 
-                      may be omitted if the layer implementation forced the storage type explicitly。
+                 0x000D4B38 => int8, 
+                 0x0002C056 => raw data with extra scaling  带有尺度信息的 float32
+		 其他 非0   =>  quantized data  256个量化数 和 索引表
           raw data : raw weight data, little-endian, 
                      float32 data or float16 data or quantized table 
                      and indexes depending on the storage type flag。
@@ -1029,6 +1030,22 @@ v8:
 }
 
 ```
+
+[Neon 指令集 ARMv7/v8 对比](https://blog.csdn.net/zsc09_leaf/article/details/45825015)
+
+V7a 有32个64位的D寄存器[D0-D31], 16个128位的Q寄存器 [Q0-Q15] ,一个Q对应2个D(2个D公用Q的高64位和低64位)。
+
+q0(低64位 d0, 高64位 d1) q1(低64位 d2, 高64位 d3)  q2(低64位 d4, 高64位 d5)  ...  q15(低64位 d30, 高64位 d31) 
+
+ARMv8 有31 个64位寄存器,1个不同名字的特殊寄存器,用途取决于上下文, 因此我们可以看成 31个64位的X寄存器或者31个32位的W寄存器(X寄存器的低32位)
+
+x0(低32位 w0) x1(低32位 w1) ... x30(低32位 w30) 
+
+ARMv8有32个128位的V寄存器，相似的，我们同样可以看成是32个32位的S寄存器或者32个64位的D寄存器。
+
+v0(低64位 d0, 低32位 s0) v1(低64位 d1, 低32位 s1) v2(低64位 d2, 低32位 s2) ... v31(低64位 d31, 低32位 s31)
+
+
 ## 2. 值大小前topk层  argmax layer
 ### 普通c++版本 
 ```c

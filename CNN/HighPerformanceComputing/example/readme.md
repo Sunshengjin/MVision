@@ -1,9 +1,60 @@
-# ncnn 使用 
+# ncnn 
+
+> 架构:
+
+1.图像预处理 ncnn::Mat
+
+    1.1 from_pixels_resize() 生成目标尺寸大小的网络输入Mat   mat_pixel.cpp
+        双线性插值图像形变 resize_bilinear_c1/c2/c3/4 1通道/2通道/3通道/4通道 图像变形算法   mat_pixel_resize.cpp
+        像素图像 转换成ncnn::Mat   Mat::from_pixels()   >>> 不同类型 from_rgb() 
+                                                像素数据指针rgb间隔 依次赋值给Mat的三个通道的指针   mat_pixel.cpp
+    1.2 substract_mean_normalize() 去均值并归一化图像   mat.cpp
+        有均值参数         
+              创建 偏置层   ncnn::create_layer(ncnn::LayerType::Bias);  载入层参数 op->load_param(pd);  3通道
+              载入层权重数据 op->load_model(ncnn::ModelBinFromMatArray(weights));  -均值参数
+              运行层        op->forward_inplace(*this);
+        有归一化参数
+              创建 尺度层   ncnn::create_layer(ncnn::LayerType::Scale);  载入层参数 op->load_param(pd);  3通道
+              载入层权重数据 op->load_model(ncnn::ModelBinFromMatArray(weights));  尺度参数
+              运行层        op->forward_inplace(*this);
+        有均值和归一化参数
+              创建 尺度层   ncnn::create_layer(ncnn::LayerType::Scale);  载入层参数 op->load_param(pd);  3通道
+              载入层权重数据 op->load_model(ncnn::ModelBinFromMatArray(weights));  -均值参数 和 尺度参数
+              运行层        op->forward_inplace(*this);
+    
+2.模型解析   ncnn::Net
+
+    2.1 Net::load_param 载入网络参数文件 proto net.cpp
+        文件头魔术数(版本?) 层类型 层名字 创建层 create_layer()/ net::create_custom_layer() 层输入blob数量 输出blob数量
+        读取输入blob 与层挂钩； 读取输出blob与层挂钩；解析层特殊参数(参数字典)  paramDict::load_param(fp);  按照 id=参数/参数数组 解析
+        每一层 的 特殊参数不一样 https://github.com/Tencent/ncnn/wiki/operation-param-weight-table
+        层载入解析得到的层特殊参数  layer->load_param(pd) 每一层特有的参数
+    
+    2.2 Net::load_model 载入网络模型文件 bin 权重数据 net.cpp
+        1.创建 ModelBinFromStdio 对象 提供载入参数的接口函数 ModelBinFromStdio::load() src/modelbin.cpp 
+          根据 权重数据开始的一个四字节数据类型参数(float32/float16/int8等) 和 指定的参数数量 读取数据到 Mat 并返回Mat
+        2.根据load_param 获取到的网络层信息 便利每一层 载入每一层的模型数据 layer->load_model() 每一层特有函数
+        3.部分层需要 根据层实际参数 调整运行流水线 layer->create_pipeline 例如卷积层和全连接层
+        4.量化的网络需要融合 Net::fuse_network()
+    
+3.网络运行  ncnn::Extractor
+
+    3.1 创建网络提取器 Extractor Net::create_extractor 提供设置网络输入 获取网络输出 设置网络运行线程参数的接口
+    3.2 设置线程参数 Extractor::set_num_threads 设置网络输入 Extractor::input
+    3.3 提取网络输出 Extractor::extract 运行网络前向运行函数 net->forward_layer
+        会根据层类型(单输入单输出/其他) blob类型(可本地修改(在输入直接修改)/不可本地修改)执行每一次的前向运行函数
+        当输入blob为空时，会递归调用 网络前向运行函数 net->forward_layer 获取前置层的输出blob
+
+
+# 编译
+
 [源码仓库](https://github.com/Tencent/ncnn)
 
-安装编译：
+[NCNN 在 window linux android平台下的部署](https://github.com/scutan90/DeepLearning-500-questions/blob/master/ch17_%E6%A8%A1%E5%9E%8B%E5%8E%8B%E7%BC%A9%E3%80%81%E5%8A%A0%E9%80%9F%E5%8F%8A%E7%A7%BB%E5%8A%A8%E7%AB%AF%E9%83%A8%E7%BD%B2/17.8.1%20NCNN%E9%83%A8%E7%BD%B2.md)
 
-    git clone https://github.com/Tencent/ncnn.git
+linux 安装编译：
+
+    git \ https://github.com/Tencent/ncnn.git
     cd ncnn 
     gedit CMakeLists.txt
     拉到最后
@@ -18,6 +69,7 @@
     cmake ..
     make 
 
+[Windows NCNN\protobuf 编译](https://blog.csdn.net/ycdhqzhiai/article/details/80738987)
 
 
 # 1. 图像分类网络

@@ -1,13 +1,19 @@
 # tensorflow  使用
+[TensorFlow 教程和实战经验 ](https://github.com/Ewenwan/EffectiveTensorflow)
+
+[tensorflow_tutorials 教程 待整合](https://github.com/Ewenwan/tensorflow_tutorials)
+
+[深入浅出Tensorflow 中文教程](https://www.ctolib.com/docs-Tensorflow-c-index.html)
 
 [TFLearn: Deep learning library featuring a higher-level API for TensorFlow ](https://github.com/Ewenwan/tflearn)
 
-[Learn_TensorFLow](https://github.com/Ewenwan/Learn_TensorFLow)
+[我的Learn_TensorFLow](https://github.com/Ewenwan/Learn_TensorFLow)
 
 [TensorFlow技术内幕（一）：导论](https://www.imooc.com/article/265350)
 
 [参考 刘光聪 著 TensorFlow 内核剖析](https://github.com/Ewenwan/MVision/blob/master/darknect/tensorflow/TensorFlow%E5%86%85%E6%A0%B8%E5%89%96%E6%9E%90.pdf)
 
+[Simple Tensorflow Cookbook 代码本](https://github.com/Ewenwan/Tensorflow-Cookbook)
 
 ![](https://upload-images.jianshu.io/upload_images/12714329-6928cb6461e05052.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/565/format/webp)
 

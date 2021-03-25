@@ -53,8 +53,7 @@
       sudo apt-get install python-numpy
 
     7.2 测试  
-        python
-        import caffe
+        python        import caffe
     错误1：
       ImportError: No module named caffe
       导入路径
@@ -91,5 +90,37 @@
     
     
     
+# 11. protobuf 源码安装
+下载 https://github.com/protocolbuffers/protobuf/archive/v3.8.0.tar.gz
+
+解压 tar -xvf protobuf-3.8.0.tar.gz
+
+编译安装
+
+./autogen.sh 
+
+可以修改安装目录通过 
+
+ ./configure --prefix=/usr/local/protobuf
+ 
+ make
+ 
+ make check
+ 
+ make install
+
+ldconfig
 
 
+安装python支持:
+
+     $ cd   protobuf/python
+     $ python3 setup.py build
+     $ python3 setup.py test
+     $ python setup.py install
+     
+     可能会提示差一些其他包
+     
+     
+     
+     

@@ -1,6 +1,376 @@
-# yolo darknet
+# 深度学习框架  人工智能操作系统 训练&前向推理
+
+[AI嵌入式框架](https://github.com/Ewenwan/nortrom-notes/blob/master/system/ai_framework.md)
+
+OneFlow & 清华计图Jittor & 华为深度学习框架MindSpore & 旷视深度学习框架MegEngine(天元） & caffe & Google的TFBOYS & Facebook的Pytorch  & XLA
+
+严格意义来说TVM和Jittor都不算深度学习框架，TVM和Jittor更多的是一套独立的深度学习编译器。我们可以将导出的模型文件通过TVM或者Jittor离线编译成一个Serving的模块，从而可以在云上或者端上部署模型的预测服务。
+
+[华为 mindspore](https://github.com/Ewenwan/mindspore)
+
+[清华计图Jittor  gt](https://github.com/Jittor/jittor/blob/master/README.cn.md)
+
+依赖: sudo apt install python3.7-dev libomp-dev    pip3 install pybind11  numpy   tqdm    pillow  astunparse  six  wheel
+
+pybind11使用问题  https://zhuanlan.zhihu.com/p/52619334 
+
+[旷视深度学习框架MegEngine gt](https://github.com/MegEngine/MegEngine)
+
+[模型可视化超好用的工具](https://github.com/lutzroeder/Netron)
+
+[使用自动代码生成技术TVM优化深度学习算子的一些思考](https://zhuanlan.zhihu.com/p/101026192)
+
+[基于ARM-v8的Tengine GEMM教程](https://github.com/Ewenwan/Tengine_gemm_tutorial)
+
+
+## 深度学习编译器
+
+[谈谈对深度学习编译技术的一些思考](https://zhuanlan.zhihu.com/p/87458316)
+
+深度学习编译器，一般是分两阶段优化，一个是high level optimization, 譬如在XLA里叫HLO， 这部分做硬件无关优化； 还有一个阶段是代码生成阶段，即codegen，和硬件体系结构相关。不同的编译器在这俩阶段的处理上各有所长。第一阶段的问题基本上被解决了，难的是第二阶段。
+
+深度学习编译器的价值取决于AI芯片的前途。AI芯片上开发编译器的难度不高，基本上和在GPU上调用cublas, cudnn写程序差不多，因为基本的张量运算都用专用电路固化了，没啥可优化的（当然访存和计算做流水还是要做的），为某款AI芯片研发深度学习编译器，可能只需要关注第一阶段的问题(HLO)，不需要解决第二阶段的问题(codegen)。如果对专用芯片上代码怎么写感兴趣，**可参照Glow, 它提供了一个为Habana 后端，这可能是唯一一个开源的AI芯片代码示例。**
+
+深度学习编译器的命运与AI芯片竞争格局息息相关，但我们并没有讨论AI芯片未来如何，这是另一个问题了，真正投入搞AI芯片的玩家对这个问题想的更清楚。
+
+1、前端用DSL还是限定一个算子集合。XLA没有DSL,而是限定了一些基本算子，element-wise, map, reduce, broadcast, matmul 等等，蛮像函数式编程里面那些基本运算，用这些基本算子可以搭建起来tensorflow 里绝大多数更上层的算子，譬如batchnorm, softmax等。这么做当然限制了表示能力，但却给第二阶段codegen 带来极大便利，因为它只需要为这些限定的算子emit LLVM IR, 用固定的套路即可，相当于逃避了第二阶段优化那个难题。Glow实际上采用了和XLA相似的策略，对于第二步取了个巧，对于常见的矩阵运算算子提供了代码生成的模板，用模板并不意味着对不同的参数（譬如矩阵的长宽）都生成一样的代码。模板里面的参数是可调的，这样如果输入代码超参数不同，它也会针对不同的超参数做一些对应的优化。所以对于XLA和Glow可观赏的只有HLO这一层，这也是比较务实的做法，因为第二阶段优化太难了。**TVM，TC, Tiramisu, PlaidML使用了DSL**，这使得它们能表示的运算范围更广，当然也直面了第二阶段优化的挑战，这也是这些编译器出彩的地方，我们在下一个要点里讨论第二阶段优化。对第一阶段优化来说，XLA做的相当全面了，可能是最全面的。
+
+2，剑宗还是气宗？在特定体系结构上自动生成最优代码，可以看出有俩套路，一个套路可以称之为剑宗，也好似一种自底向上的办法，即把专家手工优化代码的经验提炼出来，形成一些粗线条的rule（规则）, 这是TVM的路线，也就是来自Halide的思路，那些rule称为schedule，Halide的最重要贡献是提出了问题表示方法，但没有解决自动化这个问题，当然自动化问题很困难。还有一个套路可称之为气宗，寻求一种高层次的数学抽象来描述和求解代码生成问题，这个代表就是TC, Tiramisu, MLIR等依赖的Polyhedral method（多面体方法）。
+
+**深度学习编译器和传统编译器技术很不相同，它只解决一类特定问题，不去解决控制流问题，基本上是解决多重循环优化，也就是稠密计算问题。**
+
+Polyhedral method 是一种对多重循环程序的表示方法，问题表示出来之后，并不一定要借助isl求解。isl是什么？对一个比较复杂的cost model, 一个polyhedral 表示的计算，生成什么样的代码最优？这是一个离散解空间上的组合优化问题，有时可描述成整数线性规划，isl (integer set library)就是来求解这个问题的一个开源库。像TC， Tiramisu 用了isl, PlaidML和MLIR仅仅用了多面体表示却没有借助isl, 猜测：问题搜索空间太大时，isl 也不行。多面体方法只解决表示问题，不解决自动化问题。
+
+用多面体与否实际上和前端是否用DSL也有关，用Polyhedral 的都用DSL, 表明多面体的表达能力和能求解的问题范围非常广，用DSL但不用Polyhedral 也有，譬如Halide, TVM, Tiramisu 作者对Halide表达能力有所批评，需要注意的是， Halide和Tiramisu 作者们其实是同一位MIT教授的学生，这是自己对自己的批评。
+
+polyhedral 是近些年发展出来的最优雅的抽象方法，是并行编译领域的一种数学抽象，利用空间几何的仿射变换来实现循环优化。
+
+Pluto是众多Polyhedral编译器中应用范围最广、最成功的编译器之一，以该编译器为平台实现的Pluto调度算法代表了Polyhedral model调度最先进的研究水平。Pluto编译器是一个很好的开发程序并行性和数据局部性的优化工具。
+
+Pluto调度算法至今在众多领域包括将机器学习算法部署在特定加速部件等方面都发挥着重要作用。所以，Pluto编译器是一个很好的循环优化工具，也是研究Polyhedral model一个很好的平台。 Pluto编译器是一个从C程序到OpenMP的source-to-source编译器。
+
+polyhedral compilation的研究内容分为依赖关系分析、调度变换和代码生成几个部分。当然，在做这些之前，polyhedral需要用一个parser来做解析，现在比较常用的parser是pet（“Polyhedral extraction tool”（IMPACT 2012））还有clan。polyhedral涉及到的工具及其链接大部分可以在polyhedral.info这个网站上找到。
+
+现在的polyhedral研究大多被认为是由Feautrier针对数据流分析的工作“Dataflow analysis of array and scalar references”（IJPP 1991）奠基而来的。数据流分析的优势在于把依赖关系分析的粒度从语句细化到语句的实例，所以结果比传统的依赖关系分析结果更精确。但是在polyhedral里面的依赖关系分析，我并不会推荐去读这篇文章，因为这篇文章 比较难懂，我更推荐去看Pugh的“The Omega test: a fast and practical integer programming algorithm for dependence analysis”（ICS 1991）这篇文章，这篇文章对polyhedral的思维构建很有帮助。
+
+依赖关系分为value-based和memory-based两种依赖关系，这个为polyhedral里面的scheduling算法在优化和正确性方面提供了很多支持。
+
+现在大部分的polyhedral算法是Bondhugula的pluto算法“A practical automatic polyhedral parallelizer and locality optimizer”（PLDI 2008），这个算法是真正让polyhedral前后贯通的一个scheduling算法。如果对scheduling算法感兴趣，我会建议去阅读pluto算法或者Bondhugula的博士论文“Effective Automatic Parallelization and Locality Optimization using the Polyhedral Model”，这个算法也是Pluto编译器的核心。Bondhugula对scheduling算法后续做了许多优化和提升例如Pluto+，这部分可以参考他的个人主页。
+
+polyhedral的代码生成工具主要有CodeGen+，“Code generation for multiple mappings”（Frontiers 1995）和CLooG，“Code generation in the polyhedral model is easier than you think”（PACT 2004）两个工具。CodeGen+部分主要是在Omega库里使用，而CLooG和CodeGen+的代码生成方式有一些不同。这两篇文章都值得去看一下，了解一下如何生成代码。不过，“Polyhedral AST generation is more than scanning polyhedra”（TOPLAS 2015）这篇文章我建议对AST生成部分有兴趣的话可以仔细阅读一下，这个长达50页的文章系统地介绍了如何生成循环的边界、控制流条件语句还有避免代码膨胀等问题。
+
+
+
+> **深度学习编译优化技术与手工优化的对比**
+
+深度学习编译优化与手工优化并不是互斥关系，而是互补关系。在一个完整的系统里，应该既有深度学习编译优化，也有手工优化，让各自解决其适合解的问题。
+
+1). 编译优化适合解决给定策略，涉及较多routine性质tedious work的问题。比如我们知道loop unrolling会可能带来性能收益是一个策略问题，但是按什么样的strides来unroll，是一个trial-and error的问题。以及我们都知道对于GEMM进行分tile计算可以提升计算访存比，这是一个策略问题，但是给定一款硬件，按什么尺寸，在什么维度上分tile则是一个trial-and-error的问题。这类问题，适合采取编译优化的手段来解，也往往是编译优化能够在生产效率上显著优于手工优化的地方；
+
+2). 手工优化适合那种不容易精确形式化描述成一个清晰策略，带有一定非逻辑思维的直觉性质（由我们认识规律的能力水平决定）的问题，往往涉及到全局性质优化的问题具备这种性质。比如最近我们针对TensorCore在进行手工优化，会在访存pattern上进行精细的优化，以期最大可能将计算与访存overlap，就会发现涉及到精细的访存排布，至少基于目前我们对TVM schedule描述的理解，如果只是基于TVM显式提供的schedule，不去手写TVM IR，是不容易表达出来的。实际上TVM在设计上提供了Tensorize/intrinsics的接口，也是在一定程度上需要将手工优化的经验嵌入到优化流程里，但也并不是所有的手工优化都可以基于目前的tensorize/intrinsics机制来完成扩充的。
+
+3).手工优化是可能向编译优化迁移的。比如通过扩展编译引擎的内核，来加入对应的支持。比如我们最近在TVM社区里针对NV GPU TensorCore提供了基于graph/IR pass/codegen模块改造的作法，能够做到用户完全无感，自动完成TensorCore kernel优化生成的效果，而社区的另一个相关工作作法则是需要显式提供TensorCore相关intrinsics的描述，将一部分工作offload到用户层。这算是一个手工优化，向编译优化层次迁移的示例。
+
+4).总会有些优化在编译优化层面完成会存在事倍功半的效果，这类优化我们就应该考虑either是通过手工优化扩充，或是通过提供pre-defined library，甚至runtime强化的方式来进行协同优化，而不是什么优化都往编译层面压。反过来也一样。手工优化可以在极限场景下找到非常精细的性能优化空间，但是并不是所有的手工优化所探索的性能空间都复杂精细到编译优化不能支持的程度。找到不同技术适合的土壤就好。之前跟NV的同学沟通，他们针对TensorCore kernel的支持，考虑采取设计若干个小的recipe，recipe提供可定制的可能，再进行拼装组合来实现不同尺寸的GEMM kernel，这种作法，包括CUTLASS的设计思想，在我看来，都具备了一定的将手工优化的经验向编译优化层次转移的味道，只是程度不同而已。
+
+对于AI芯片来说，已经以后专门的硬件架构来解决ai中常见的计算密集型算子，GPU虽然有一定通用性没有完全硬件化，但TensorCore的出现也使它未来可能有这方面的趋势，这样来说软件编译器在这里能做的事情应该是有限的；可能“主要开销都不是计算密集型算子”，数据搬运非常关键。
+
+
+## 深度学习框架简述
+
+深度学习框架发展到今天，目前在架构上大体已经基本上成熟并且逐渐趋同。无论是国外的Tensorflow、PyTorch，亦或是国内最近开源的MegEngine、MindSpore，目前基本上都是支持EagerMode和GraphMode两种模式。
+
+> Tensorflow
+
+Google的Tensorflow最早是按照GraphMode来设计的，GraphMode是系统同学比较偏爱的一个架构。用户通过申明式的API来定义好模型，然后后面具体的优化、执行都交给后端的系统。由于系统能够一次能够拿到整个执行的Graph，因此系统同学便有足够的空间对系统做各种优化。比如在Tensorflow里面，我们可以做各种类型的优化，包括Placement的优化、图优化（Grappler）、内存优化、分布式优化等。不过GraphMode有一个弊端，就是模型调试。许多使用Tensorflow的算法同学对于运行过程中遇到的各种千奇百怪的问题都感到束手无策。不过需要说的是，从Tensorflow上来看的话Google在整个AI系统领域的布局是最完善的，从底层的芯片（推理、训练、端）、到深度学习框架（Tensorflow、、XLA），再到模型部署（TF Serving、TFLite），最后再到TF的训练链路（TFX、TF.js、Tensorboard、federated）。从这些布局来看，整个Tensorflow的设计完全体现出了Google的系统深度，并完全引领了整个AI系统。
+
+> PyTorch
+
+PyTorch从一开始就是按照EagerMode来进行架构实现。和Tensorflow v1.0对比，PyTorch非常灵活，对于开发者极其友好。因此，在开发者社区上PyTorch很快就逼近了Tensorflow，从最近两年的论文应用上我们也能看到PyTorch的引用数和Tensorflow越来越接近。从这个角度来看会给人一个感觉就是Tensorflow起了个大早赶了个晚集。我们也能看到Tensorflow也在2.0里面也开始支持EagerMode并将EagerMode设置为默认的运行模式，希望能够补齐易用性这个短板。不过其实对于Tensorflow而言转型支持EagerMode其实不容易。就像前面说道的，Tensorflow自身的架构是完全按照GraphMode来设计的，因此为了支持EagerMode，Tensorflow自身的改动也是很痛苦，从Tensorflow的代码来看许多地方都加入了if（eager_mode)这样的判断条件。不过PyTorch也不是完美无缺。对于PyTorch的开发者而言，PyTorch模型的Deployment过程是一个痛苦的过程。这也是在工业界Tensorflow相比较PyTorch更受欢迎的一个重要原因。
+
+> 华为MindSpore
+
+华为在国内是一个很值得尊敬的企业。可以这么说，华为在IT这个领域是整体上部署最完善的公司。这些领域包括了云计算最底层的网络、存储、服务器、芯片，也包括了上层的编译器、高斯数据库。在深度学习这个领域，华为可以说布局也比较完整，比如Asend芯片（训练、推理）、最近刚开源的深度学习框架MindSpore。对于一家企业而言，布局这些领域都是需要极大的决心。不过企业布局这些领域也不是为了开发而开发，为了自研而自研。对于企业而言，布局这些领域最终肯定是希望能够在商业上带来相应的回报。(开源社区与华为共成长)
+
+从MindSpore这个框架的架构来看，MindSpore的架构和目前已有引擎的架构比较相似，整体执行也都是基于自动微分进行的设计。这个也比较合理。另外，整个框架从上往下依次是Python的DSL层、中间的Graph优化层以及底下的执行层。这个架构也是目前主流的引擎的相似的架构。此外，由于有了后发的优势，MindSpore应该是在设计之初就考虑了如何兼具EagerMode和GraphMode两种执行方式，这样就可以同时兼具易用性和高性能。在底层不同设备的支持上，我们也能够看到MindSpore支持了包括CPU，GPU加速器，当然最重要的还是自家的Ascend芯片。
+
+> 自动并行 Auto Parallel
+
+MindSpore里面我觉得一个比较大的亮点也是他们在文档里面强调的一个就是自动并行的训练能力。自动并行是一个在其他领域研究的比较多的方向，比如在大数据领域对于用户写的一条SQL语句我们能够在优化器内部自动生成一个相对较优的执行计划，从而生成一个自动并行的Mapper-Reduce任务。在深度学习这个领域也存在这个问题，那就是如何将用户的模型最大高效的并行执行。
+
+在深度学习这个领域存在多种并行的范式，比如数据并行（Data Paralle)，模型并行（Model Parallel），混合并行（Hybrid Parallel)等。目前在深度学习分布式执行这个领域应用最多的还是数据并行，也就是Data Parallel。业内多个框架，比如Horovod，Tensorflow的DistributeStrategy，PyTorch的DDP，这些都是数据并行的分布式框架。数据并行就是将模型在多个设备上进行复制并行训练，同时基于NCCL进行梯度同步，从而达到分布式执行的效果。数据并行这个架构比较简洁，模型构建也比较清晰，因此目前绝大部分任务都是采用数据并行的训练方式。
+
+MindSpore里面也支持基本的数据并行能力。不过从MindSpore里面他着重强调的是自动并行。这里的自动并行是指从众多的并行可能性里面搜寻出一种最优的并行执行方式，比如将部分算子进行自动拆分从而达到一个比较好的并行效果。从下面的图里面我们能够看到MindSpore的自动并行是基于一个Cost Model来进行并行策略的评估。通过Cost Model，我们可以对不同的并行策略进行评估，从而可以选择一个cost最小的并行策略。在Cost Model里面，我们通常会对通信的cost、计算的cost、算子拆分的cost等进行评估。并行策略的搜寻算法在MindSpore里面我们看到使用了动态规划（dynamic programming)和递归算法(recursive programming)。
+
+> 自动并行的挑战
+
+对于自动并行而言，最大的挑战是如何寻优到最佳的并行策略。对于常见的数据并行而言，我们只需要将模型副本分布到不同的设备上，选择合适的时间对梯度进行AllReduce即可。对于自动并行，我们需要考虑不同的通信拓扑（比如以太网、NVLink、多网卡设备）、算子拆分（Layer间拆分、Layer内拆分）、设备算力、流水并行、算子计算依赖、显存大小、通信成本（Weight，Activation等）等众多维度。Google有一个项目，Mesh-Tensorflow，目前是提供了相应算子的拆分机制。算法同学可以自由的在不同的维度（Batch维度、NCHW四个维度、Matmul维度等）进行拆分。在MindSpore里面我们也看到也提供了类似的拆分能力，在MindSpore源代码里面我们看到了支持算子的定义，不过相应拆分的能力目前没有看到可以让用户来指定。
+
+# AI通用框架
+
+## caffe
+
+* concept
+    * top & bottom
+        * forward: bottom -> top
+        * backward: top -> bottom
+* usage
+    * check caffe proto
+        * [Netscope Editor](http://ethereon.github.io/netscope/#/editor)
+    * set weight init method
+        * see include/caffe/filler.hpp
+    * iter_size
+        * You can change the iter_size in the solver parameters. Caffe accumulates gradients over **iter_size x batch_size** instances in each stochastic gradient descent step. So increasing iter_size can also get more stable gradient when you cannot use large batch_size due to the limited memory.
+    * test_iter
+        * how many iterations to be executed for a test loop(each iteration calculate a batch of test image)
+    * test_interval
+        * how often a test is executed, test_interval iterations(each iteration calculate a batch of train image)
+    * epoch
+        * iteration number needs to iterate all train image number = train image num / batch size
+    * lr_policy
+        * learning rate policy, usually set to "step"
+            * fixed:　　 保持base_lr不变.
+            * step: 　　 如果设置为step,则还需要设置一个stepsize,  返回base_lr \* gamma ^ (floor(iter / stepsize)),其中iter表示当前的迭代次数
+            * exp:   　　返回base_lr \* gamma ^ iter， iter为当前迭代次数
+            * inv:　　    如果设置为inv,还需要设置一个power, 返回base_lr \* (1 + gamma \* iter) ^ (- power)- multistep: 如果设置为multistep,则还需要设置一个stepvalue。这个参数和step很相似，step是均匀等间隔变化，而multistep则是根据                                 stepvalue值变化
+            * poly: 　　  学习率进行多项式误差, 返回 base_lr (1 - iter/max_iter) ^ (power)- sigmoid:　学习率进行sigmod衰减，返回 base_lr ( 1/(1 + exp(-gamma \* (iter - stepsize))))
+    * display
+        * show loss/lr in console in each 'display' iterations
+* layer
+    * power
+        * 输入1 featuremap，输出1 featuremap
+        * eltwise级操作
+        * 计算：$(shift + scale * x)^{power}$
+    * scale
+        * 输入2 featuremap，输出1 featuremap
+        * 输入1：$n*c*h*w$，输入2：$n*c*1*1$
+        * 计算：输入2h&w维度平铺展开，与输入1 eltwise prod
+    * permute
+        * 输入1 featuremap，输出1 featuremap
+        * 交换caffe_blob中数据的维度，下面参数将$n*c*h*w$-->$c*n*h*w$
+        
+        ```
+        permute_param {
+            order: 1
+            order: 0
+            order: 2
+            order: 3
+        }
+        ```
+    
+    * reshape
+        * 输入1 featuremap，输出1 featuremap
+        * 只改变输入数据的维度表示，内容不变
+        * dim的参数0：表示维度不变，x：表示将原来维度变化为x，-1：表示自动推算剩下维度
+        * 比如下面的参数将32x3x28x28变换为32x3x14x56
+
+        ```
+        shape {
+            dim: 0  # 32 --> 32
+            dim: 0  # 3  --> 3
+            dim: 14 # 28 --> 14
+            dim: -1 # deduce 28 --> 56
+        }
+        ```
+
+    * flatten
+        * 输入1 featuremap，输出1 featuremap
+        * 只改变输入数据的维度表示，内容不变，将数据拉成一维向量
+        * $n*c*h*w$-->$n*1*1*(chw)$
+* proto
+    * 简介
+        * protobuf是一种轻便高效的结构化数据存储格式。
+        * 包含proto文件，prototxt，protoc编译器。
+        * prototxt文件是结构化数据按照proto文件定义的格式序列化后的文本文件。
+    * caffe.proto
+        * 在caffe编译过程中，protoc编译器编译caffe.proto得到caffe.pb.cc和caffe.pb.h，包含了所有消息类型的序列化和反序列化接口。
+
+## tensorflow
+
+* 简介
+    * 2015.11
+* 机制
+    * 计算图(静态图)
+        * 声明式编程(declarative programming)，不兼容python自身语法体系，无法实时调试和打印，甚至无法使用python自带的if-else和while控制语句。
+        * 基于静态图进行了深入的优化，但牺牲了灵活性。
+* 静态图优化范畴
+    * 算子融合、内存复用、计算划分、即时编译
+* 基本概念
+    * Graph: 计算图
+    * Node: 包含计算节点和数据节点，类似于caffe中的layer概念
+    * Tensor: 实际数据的表示形式，在计算图中为节点和节点的连接
+    * Session: 会话，为整个计算图的计算提供上下文，包括GPU配置信息等
+    * meta：计算图结构文件
+    * ckpt：模型参数文件
+* 常见问题
+    * 为什么tensorflow必须使用特定域语言描述计算图？
+        * 对计算性能的极致要求，需要完善的数值库，非常低的编译开销，很高的硬件支持，这是python无法提供的。
+    * 为什么tensorflow的静态图有这么大的局限性？
+        * 因为静态图对计算类型有预设，目前的计算图中仅对有向无环图支持友好，一旦出现条件分支、循环、递归、以及模型大小取决于输入规模等（word2vec），就会给框架带来巨大挑战
+    * 为什么tensorflow的特定域语言图灵完备？
+        * 因为其包含tf.cond和tf.while_loop
+
+
+## pytorch
+
+* 简介
+    * 2016.10
+* 机制
+    * 计算图（动态图）
+        * 命令式编程(imperative programming)，数据实时计算，支持实时调试，和python语法完全兼容
+        * 保证灵活性但部分程度上牺牲运行时性能
+
+## mindspore
+
+* 机制
+    * 张量加速引擎（TBE）
+        * 介绍：用张量加速引擎语言编写TBE算子，构建各种神经网络模型
+        * 模块：特定域语言（DSL）模块；调度模块；中间表达模块；编译器传递模块；代码生成模块（本人预测仅该部分为昇腾实现，前4个模块均复用TVM框架）
+        * 应用场景
+            * TBE标准算子库
+            * TBE自定义算子（自定义计算）
+            * TBE算子融合
+        * TVM&引擎关联
+            * 昇腾构建TVM lowerIR与芯片代码间的关联，用户根据场景搜索出合适的代码实现。（参见昇腾AI处理器架构与实现P178）
+            * DSL--> Deep Learning IR --> LLVM IR --> Target(参见昇腾AI处理器架构与实现P163)
+    * 离线模型生成器
+        * 需预先确定模型输入维度和对应的内存大小
+        * 独立于硬件的算子融合优化及内存复用优化
+
+## 比较
+
+||图类型|序列化方式|模型|
+|---|---|---|---|
+|caffe|静态|prototxt(protobuf)|.caffemodel|
+|tensorflow|静态（eager动态）|meta|.ckpt|
+|pytorch|动态（jit静态）||.pth|
+|mindspore|静态+动态||.ms|
+
+* 深度学习编译栈比较
+    * TensorRT
+        * 只关注模型在GPU架构上的推理性能
+    * tensorflow XLA
+        * 使用LLVM中间表示来描述各个算子，能复用LLVM的一系列前端优化手段
+    * Tensor Comprehensions
+        * 使用Halide中间表示来描述底层计算，通过各种编译器理论中的优化方法，针对特定硬件架构对底层的计算循环进行变换和优化
+    * TVM
+        * 图级别中间表示NNVM和Relay，Halide中间表示作为下层的计算支撑，AutoTVM提供搜索算法针对特定硬件架构找到最优方案。
+
+## 推理优化
+
+* 基本优化方法
+    * 优化内存
+        * 多次推理复用同一片存储区域
+        * 共享输出层的内存合并，共享输入层的内存复用
+    * 优化计算效率
+        * 多batch（补零，启动时间，调度时间开销较大）
+* 融合
+    * 算子融合
+        * 常量运算预计算（batchnorm）
+        * 公共子表达式消除（fused-conv-bn-relu，又称CBR）
+        * 子图融合（多个共享相同输入和参数规模的CBR融合）
+* 计算优化
+    * 计算模型优化
+        * FFT
+        * winograd
+    * 计算效率优化
+        * 循环展开，矩阵分块
+        * 存储顺序优化（NCkHWK,NC4HW4,NHWC）
+        * 专用内核
+
+## 其他概念
+
+* 网络格式转换
+    * ONNX(开发网络交换格式)
+    * MMdnn
+* 编译器堆栈(compiler stack)
+    * 深度学习推理引擎完成了不同深度学习框架下的模型到不同硬件平台的端到端任务，类似于编译器完成不同编译器到不同平台的任务，所以被称作为编译器堆栈。
+
+# AI集群框架
+## 涉及的问题
+
+* 数据传输带宽
+  * 单机内传输
+    * PCI-E，NVLINK
+  * 多机间传输
+    * 以太网，Inifiniband，Omini-Patch Architecture
+* 文件读写带宽
+  * 随机读写-IOPS，大文件读写-带宽
+  * 介质：HDA，SSD，3d xpoint
+  * refer [storage performance](./system.md#performance)
+* 并行方案
+  * 方案
+    * 数据并行：计算节点单独进行前向与反向运算，梯度规约之后进行更新
+    * 模型并行：不同的计算节点负责网络的一部分运算
+    * 混合并行：数据并行+模型并行
+  * 常用策略
+    * 由于数据并行虽然加速明显，但需要节点间数据传输；因此计算密集型操作可数据并行，数据密集型操作可模型并行。比如conv适合数据并行，fc适合模型并行
+
+# 大数据框架
+
+* 分布式计算框架
+  * MapReduce:离线批处理框架
+  * Tez:DAG计算框架
+  * Spark:迭代/内存计算框架
+  * Storm:实时流计算框架
+* 技术支撑
+  * 一致性算法：Paxos
+  * 分布式协同：Apache Zookeeper & Google Chubby
+  * 分布式存储：HDFS & HBase
+* 概念
+    * yarn:Yet Another Resource Negotiator，一种新的 Hadoop 资源管理器
+    * spark工作模式：单机/standalone/yarn
+    * 流式API：
+        * 流水线式处理数据，处理类型为函数式编程中常见的map/sort/reduce/filter等操作
+        * 举例
+        ```java
+        List<String> threeHighCaloricDishNames =
+          menu.stream()//从menu获得流
+          .filter(d -> d.getCalories() > 300)//筛选热量大于300的
+          .map(Dish::getName)//只需要名称
+          .limit(3)//限制取3个元素
+          .collect(toList());//保存结果到List
+        System.out.println(threeHighCaloricDishNames);
+        ```
+
+
+# 开发深度学习框架的知识架构
+
+1，熟悉常见深度学习模型，CNN, GAN, RNN/LSTM, BERT, Transformer;
+
+2,熟悉后向误差传播算法（BP），完成从标量求导到矩阵求导思维方式的转换，熟悉常见算子的梯度推导（矩阵乘，卷积， 池化，Relu，如果会batch normalization 就一步到位了）；
+
+3，熟悉autograd的基本原理，能自己手撸一个最好；
+
+4，熟悉cuda编程（举一反三），熟悉cuda高阶用法，event, stream, 异步/同步，会优化常见cuda kernel, element-wise, reduce, broadcast， MatMul, conv, pooling 等；
+
+5，熟悉c++和python, 对c++高级用法感到舒服，各种模式，惯用法，模板；熟悉vim, gdb 程序调试；
+
+6，熟悉socket, RDMA编程，熟悉常见collective operation代价分析，譬如ring allreduce, tree allreduce 代价分析；
+
+7，熟悉多线程编程，熟悉锁，条件变量，内核线程，用户级线程，对actor, CSP(coroutine)各种技术熟悉；
+
+8，熟悉编译器基本原理，parser什么的不重要，主要是dataflow分析，灵活运用；熟悉多重循环程序优化技巧，譬如polyhedral 模型；
+
+9，熟悉常见分布式系统原理，mapreduce, spark, flink, tensorflow 等；
+
+10，熟悉计算机体系机构，量化分析方法，Amdahl' Law, Roofline Model, 流水线分析（譬如David Patterson 那本书）；
+
+11，熟悉操作系统原理及常用系统诊断工具，譬如各种资源利用率分析；
+
+12，programming language 原理，命令式编程，函数式编程，逻辑编程，入门书《程序的构造与解释》？
+
+13，熟悉项目构建原理，compiler, assembler, linker， loader之类，有一本书《程序员的自我修养》有比较全面覆盖。
+
+[编译器书籍 现代体系结构的优化编译器 高级编译器设计与实现](https://github.com/Ewenwan/compilerbook)
+
+# 目标检测 yolov3相关  darknet框架
+
+[YOLO_v3 TF 加强版 GN FC DA ](https://github.com/Stinky-Tofu/YOLO_V3)
 
 [caffe 实现  MobileNet-YOLOv3 ](https://github.com/Ewenwan/MobileNet-YOLO)
+
+[Translate darknet to tensorflow darkflow](https://github.com/thtrieu/darkflow)
 
 [FOR Raspberry Pi 3 ](https://github.com/digitalbrain79/darknet-nnpack)
 
@@ -20,7 +390,7 @@
 
 [自动标注图片工具 A self automatically labeling tool ](https://github.com/eric612/AutoLabelImg)
 
-## 0.项目主页
+## 0. darknet 项目主页
 [darknet yolov3](https://pjreddie.com/darknet/yolo/)
 
 [darknet yolov3 from scratch in PyTorch 详细](https://blog.paperspace.com/how-to-implement-a-yolo-object-detector-in-pytorch/)

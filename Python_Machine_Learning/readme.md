@@ -1,9 +1,17 @@
 # 机器学习
 [我的代码!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!](https://github.com/Ewenwan/PyML)
 
+[台湾大学李宏毅老师机器学习](https://github.com/Ewenwan/NTU-Machine-learning)
+
+[机器学习算法 程序笔记 待整合](https://github.com/Ewenwan/Machine_Learning)
+
 [机器学习&深度学习网站资源汇总（Machine Learning Resources） ](https://github.com/Ewenwan/mlhub123)
 
 [机器学习资源 Machine learning Resources](https://github.com/Ewenwan/MachineLearning-1)
+
+[（西瓜书）公式推导解析](https://github.com/Ewenwan/pumpkin-book)
+
+[c++ 机器学习库源码，可借鉴，学习!!!!!!!](https://github.com/mlpack/mlpack)
 
 ![](http://antkillerfarm.github.io/images/article/ML.jpg)
 
@@ -27,6 +35,8 @@
 [课程《Python3 入门机器学习》示例代码](https://github.com/liuyubobobo/Play-Leetcode)
 
 [台大机器学习课程作业详解 ](https://github.com/Ewenwan/ML-Foundation-and-ML-Techniques)
+
+[集体智慧编程 collective intelligence](https://github.com/Ewenwan/Programming-Collective-Intelligence-Source-Code)
 
 ## 1 最大释然估计  Maximum Likelihood Estimation (MLE)  最大后验概率Maximum A Posterior (MAP) 
 ## 2 朴素贝叶斯 Naive Bayes

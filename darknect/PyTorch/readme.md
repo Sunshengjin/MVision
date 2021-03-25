@@ -1,17 +1,42 @@
 # PyTorch
 [参考](https://blog.csdn.net/zzulp/article/details/80573331)
 
+[PyTorch_Tutorials PyTorch 实战教程 待整合](https://github.com/Ewenwan/PyTorch_Tutorials)
+
+[PyTorch_Tutorials 2 ](https://github.com/Ewenwan/PyTorch-Tutorial-1)
+ 
+[pytorch-tutorial 2 ](https://github.com/Ewenwan/pytorch-tutorial)
+
+[PyTorch 中文手册 （pytorch handbook）](https://github.com/Ewenwan/pytorch-handbook)
+
+很多人都会拿PyTorch和Google的Tensorflow进行比较，这个肯定是没有问题的，因为他们是最火的两个深度学习框架了。
+
+但是说到PyTorch，其实应该先说Torch。
+
+
     Pytorch是torch的python版本，
     是由Facebook开源的神经网络框架。
     与Tensorflow的静态计算图不同，
     pytorch的计算图是动态的，
     可以根据计算需要实时改变计算图。
     
+    Torch英译中：火炬
+    Torch是一个与Numpy类似的张量（Tensor）操作库，
+    与Numpy不同的是Torch对GPU支持的很好，Lua是Torch的上层包装。
+    
+    PyTorch是一个基于Torch的Python开源机器学习库，用于自然语言处理等应用程序。
+    它主要由Facebook的人工智能研究小组开发。Uber的"Pyro"也是使用的这个库。
+    
     安装：
     
     pip install torch torchvision  # for python2.7
     pip3 install torch torchvision  # for python3
     
+    PyTorch是一个Python包，提供两个高级功能：
+      1. 具有强大的GPU加速的张量计算（如NumPy）
+      2. 包含自动求导系统的的深度神经网络
+
+
 ## 特点
 
     1. Numpy风格的Tensor操作。pytorch中tensor提供的API参考了Numpy的设计，
@@ -48,7 +73,27 @@
     ones_like(t)              返回与t的shape相同的张量，且元素初始为1
     zeros_like(t)             返回与t的shape相同的张量，且元素初始为0
     arange(s,e,sep)           在区间[s,e)上以间隔sep生成一个序列张量
-    
+```python
+# 创建一个 a 5x3 矩阵, 但是未初始化:
+x = torch.empty(5, 3) # 全0
+
+# 创建一个随机初始化的矩阵:
+x = torch.rand(5, 3) # 0~1直接
+
+# 创建一个0填充的矩阵，数据类型为long:
+x = torch.zeros(5, 3, dtype=torch.long)
+
+# 创建tensor并使用现有数据初始化:
+x = torch.tensor([5.5, 3])
+# tensor([5.5000, 3.0000])
+
+# 根据现有的张量创建张量。 这些方法将重用输入张量的属性，例如， dtype，除非设置新的值进行覆盖
+x = x.new_ones(5, 3, dtype=torch.double)      # new_* 方法来创建对象 全1
+
+x = torch.randn_like(x, dtype=torch.float)    # 覆盖 dtype!    0~1数据
+                                  #  对象的size 是相同的，只是值和类型发生了变化
+
+```
 ###  随机采样
     方法名                  说明
     rand(*size)         在区间[0,1)返回一个均匀分布的随机数张量
@@ -77,7 +122,44 @@
     sign                    取符号
     sqrt                    开根号
     tanh	
- 
+    
+```python
+y=torch.rand(5, 3)
+print(x  + y)
+print(torch.add(x, y))
+# 提供输出tensor作为参数
+result = torch.empty(5, 3)
+torch.add(x, y, out=result)
+
+# 使用方法
+y.add_(x)
+# 任何 以``_`` 结尾的操作都会用结果替换原变量. 例如: ``x.copy_(y)``, ``x.t_()``, 都会改变 ``x``.
+
+# 第2列
+x[:, 1]
+
+#  NumPy 转换, 使用from_numpy自动转化
+import numpy as np
+a = np.ones(5)
+b = torch.from_numpy(a)
+np.add(a, 1, out=a)
+
+```
+
+CUDA 张量,使用.to 方法 可以将Tensor被移动到任何设备中
+```python
+# is_available 函数判断是否有cuda可以使用
+# ``torch.device``将张量移动到指定的设备中
+if torch.cuda.is_available():
+    device = torch.device("cuda")          # a CUDA 设备对象
+    y = torch.ones_like(x, device=device)  # 直接从GPU创建张量
+    x = x.to(device)                       # 或者直接使用``.to("cuda")``将张量移动到cuda中
+    z = x + y
+    print(z)
+    print(z.to("cpu", torch.double))       # ``.to`` 也会对变量的类型做更改
+    
+```
+
 ### 归约方法
     方法名                     说明
     cumprod(t, axis)       在指定维度对t进行累积

@@ -1,5 +1,7 @@
 # 包含目录
 
+[动手学深度学习（Dive into Deep Learning，D2L）  墙裂推荐](https://github.com/d2l-ai/d2l-zh)
+
         1. 行为识别 Action_Recognition
           IDT
           TSN
@@ -50,6 +52,9 @@
 发展
 
 ![](https://github.com/Ewenwan/MVision/blob/master/od.png)
+
+
+[目标检测相关论文笔记](https://github.com/Ewenwan/windy-afternoon/tree/master/ml/papers/detection)
 
 # 卷积神经网络
 [one-stage two-stage目标检测总结](https://zsc.github.io/megvii-pku-dl-course/slides/Lecture6(Object%20Detection).pdf)
@@ -237,6 +242,8 @@ If you like this, star it, thanks!
 [中英文对照](http://noahsnail.com/2017/08/21/2017-8-21-CRNN%E8%AE%BA%E6%96%87%E7%BF%BB%E8%AF%91%E2%80%94%E2%80%94%E4%B8%AD%E8%8B%B1%E6%96%87%E5%AF%B9%E7%85%A7/)
 
 [ocn代码示例](https://github.com/fengbingchun/OCR_Test)
+
+[Use CTC + tensorflow to OCR ](https://github.com/ilovin/lstm_ctc_ocr)
 
 * CTPN  
 [Detecting Text in Natural Image with Connectionist Text Proposal Network](https://arxiv.org/abs/1609.03605)
